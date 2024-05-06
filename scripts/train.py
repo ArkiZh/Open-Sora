@@ -100,6 +100,7 @@ def main():
         num_frames=cfg.num_frames,
         frame_interval=cfg.frame_interval,
         root=cfg.root,
+        max_samples=100
     )
 
     # TODO: use plugin's prepare dataloader
@@ -284,4 +285,5 @@ def main():
 
 
 if __name__ == "__main__":
+    import monkey_patching
     main()

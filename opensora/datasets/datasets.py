@@ -51,11 +51,14 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         frame_interval=1,
         transform=None,
         root=None,
+        max_samples=None
     ):
         self.csv_path = csv_path
         with open(csv_path, "r") as f:
             reader = csv.reader(f)
             self.samples = list(reader)
+            if max_samples is not None:
+                self.samples = self.samples[:max_samples]
 
         ext = self.samples[0][0].split(".")[-1]
         if ext.lower() in ("mp4", "avi", "mov", "mkv"):

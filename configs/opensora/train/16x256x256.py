@@ -43,9 +43,9 @@ seed = 42
 outputs = "outputs"
 wandb = False
 
-epochs = 1000
+epochs = 10
 log_every = 10
-ckpt_every = 1000
+ckpt_every = 10
 load = None
 
 batch_size = 8
