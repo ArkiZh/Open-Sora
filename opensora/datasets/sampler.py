@@ -21,7 +21,7 @@ def apply(data, method=None, frame_interval=None, seed=None, num_bucket=None):
         data["width"],
         frame_interval,
         seed + data["id"] * num_bucket,
-    )
+    ) # type: ignore
 
 
 class VariableVideoBatchSampler(DistributedSampler):

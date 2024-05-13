@@ -448,6 +448,7 @@ def model_wrapper(
             x_in = torch.cat([x] * 2)
             t_in = torch.cat([t_continuous] * 2)
             c_in = torch.cat([unconditional_condition, condition])
+            # print("="*100, x_in.dtype, t_in.dtype, c_in.dtype)
             noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
             return noise_uncond + guidance_scale * (noise - noise_uncond)
 

@@ -115,8 +115,9 @@ class VariableVideoTextDataset(VideoTextDataset):
         frame_interval=1,
         image_size=None,
         transform_name=None,
+        max_samples=None
     ):
-        super().__init__(data_path, num_frames, frame_interval, image_size, transform_name=None)
+        super().__init__(data_path, num_frames, frame_interval, image_size, transform_name=None, max_samples=max_samples)
         self.transform_name = transform_name
         self.data["id"] = np.arange(len(self.data))
 

@@ -551,7 +551,7 @@ def main():
                     sampling_steps = gr.Slider(
                         value=100,
                         minimum=1,
-                        maximum=200,
+                        maximum=1000,
                         step=1,
                         label="Sampling steps"
                     )

@@ -73,7 +73,7 @@ class Bucket:
         resolution = H * W
         approx = 0.8
 
-        fail = True
+        skip = True
         for hw_id, t_criteria in self.bucket_probs.items():
             if resolution < self.hw_criteria[hw_id] * approx:
                 continue
@@ -83,27 +83,27 @@ class Bucket:
                 if 1 in t_criteria:
                     rng = np.random.default_rng(seed + self.bucket_id[hw_id][1])
                     if rng.random() < t_criteria[1]:
-                        fail = False
+                        skip = False
                         t_id = 1
                         break
                 else:
                     continue
 
             # otherwise, find suitable t_id for video
-            t_fail = True
+            t_skip = True
             for t_id, prob in t_criteria.items():
                 if T > t_id * frame_interval and t_id != 1:
-                    t_fail = False
+                    t_skip = False
                     break
-            if t_fail:
+            if t_skip:
                 continue
 
             # leave the loop if prob is high enough
             rng = np.random.default_rng(seed + self.bucket_id[hw_id][t_id])
             if prob == 1 or rng.random() < prob:
-                fail = False
+                skip = False
                 break
-        if fail:
+        if skip:
             return None
 
         # get aspect ratio id
