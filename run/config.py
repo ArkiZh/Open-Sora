@@ -1,5 +1,3 @@
-# this file is only for batch size search and is not used for training
-
 # Define dataset
 dataset = dict(
     type="VariableVideoTextDataset",
@@ -9,19 +7,23 @@ dataset = dict(
     image_size=(None, None),
     transform_name="resize_crop",
 )
+# IMG: 1024 (20%) 512 (30%) 256 (50%) drop (50%)
+bucket_config = dict({
+    '144p': {20: (1.0, 56), 30: (1.0, 40), 40: (1.0, 32), 50: (1.0, 24)},
+    '256': {20: (0.5, 32), 30: (0.5, 24), 40: (0.5, 16), 50: (0.5, 16)}
+})
 
-# bucket config format:
-# 1. { resolution: {num_frames: (prob, batch_size)} }, in this case batch_size is ignored when searching
-# 2. { resolution: {num_frames: (prob, (max_batch_size, ))} }, batch_size is searched in the range [batch_size_start, max_batch_size), batch_size_start is configured via CLI
-# 3. { resolution: {num_frames: (prob, (min_batch_size, max_batch_size))} }, batch_size is searched in the range [min_batch_size, max_batch_size)
-# 4. { resolution: {num_frames: (prob, (min_batch_size, max_batch_size, step_size))} }, batch_size is searched in the range [min_batch_size, max_batch_size) with step_size (grid search)
-# 5. { resolution: {num_frames: (0.0, None)} }, this bucket will not be used
-
-bucket_config = {
-    "144p": {40: (1.0, (8, 48, 8)), 50: (1.0, (8, 36, 8))},
-    "256": {20: (1.0, (8, 56, 8)), 30: (1.0, (8, 32, 8)), 40: (1.0, (8, 24, 8)), 50: (1.0, (8, 18, 8))},
+mask_ratios = {
+    "mask_no": 0.75,
+    "mask_quarter_random": 0.025,
+    "mask_quarter_head": 0.025,
+    "mask_quarter_tail": 0.025,
+    "mask_quarter_head_tail": 0.05,
+    "mask_image_random": 0.025,
+    "mask_image_head": 0.025,
+    "mask_image_tail": 0.025,
+    "mask_image_head_tail": 0.05,
 }
-
 
 # Define acceleration
 num_workers = 16
@@ -61,11 +63,11 @@ scheduler = dict(
 # Others
 seed = 42
 outputs = "outputs"
-wandb = False
+wandb = True
 
 epochs = 1000
 log_every = 10
-ckpt_every = 1000
+ckpt_every = 100
 load = None
 
 batch_size = None

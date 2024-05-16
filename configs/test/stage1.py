@@ -6,7 +6,7 @@ dataset = dict(
     frame_interval=3,
     image_size=(None, None),
     transform_name="resize_crop",
-    max_samples=10000
+    max_samples=1000
 )
 # IMG: 1024 (20%) 512 (30%) 256 (50%) drop (50%)
 bucket_config = {  # 1s/it

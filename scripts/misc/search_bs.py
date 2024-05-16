@@ -70,8 +70,8 @@ def parse_configs():
         help="path to model ckpt; will overwrite cfg.ckpt_path if specified",
     )
     parser.add_argument("--data-path", default=None, type=str, help="path to data csv", required=True)
-    parser.add_argument("--warmup-steps", default=1, type=int, help="warmup steps")
-    parser.add_argument("--active-steps", default=1, type=int, help="active steps")
+    parser.add_argument("--warmup-steps", default=2, type=int, help="warmup steps")
+    parser.add_argument("--active-steps", default=3, type=int, help="active steps")
     parser.add_argument("--base-resolution", default="240p", type=str, help="base resolution")
     parser.add_argument("--base-frames", default=128, type=int, help="base frames")
     parser.add_argument("--batch-size-start", default=2, type=int, help="batch size start")
@@ -91,6 +91,45 @@ def rewrite_config(cfg, resolution, num_frames, batch_size):
 def update_bucket_config_bs(bucket_config, resolution, num_frames, batch_size):
     p, _ = bucket_config[resolution][num_frames]
     bucket_config[resolution][num_frames] = (p, batch_size)
+
+def update_figure_data(figure_dict, output_file):
+    from pathlib import Path
+    f_name = Path(output_file).stem
+    f_txt = Path(Path(output_file).parent, f"{f_name}_figure.txt")
+    f_pkl = Path(Path(output_file).parent, f"{f_name}_figure.pkl")
+    with open(f_txt, "w", encoding="utf=8") as f:
+        for k, v in figure_dict.items():
+            s = ""
+            batch_size, step_times = v
+            s+= f"\n\n======================= Experiment for {k}:\n"
+            ss = []
+            for b, t in zip(batch_size, step_times):
+                ss.append([b, f"Batch={b:3d}: {t/b:7.3f} second/sample, {b/t:7.3f} samples/second, {t:7.3f}s"])
+            ss = sorted(ss,key=lambda v: v[0])
+            s += "\n".join([v[1] for v in ss])
+            print(s)
+            f.write(s)
+
+    import pickle
+    with open(f_pkl, "wb") as f:
+        pickle.dump(figure_dict, f)
+
+
+def str2tensor(s, device=None):
+    assert isinstance(s, str)
+    import torch
+    bs = str(s).encode(encoding="utf-8")
+    bs = list(bs)
+    t = torch.tensor(bs, dtype=torch.uint8, device=device)
+    return t
+
+
+def tensor2str(t):
+    import torch
+    assert isinstance(t, torch.Tensor) and t.ndim == 1
+    s = bytes(t.tolist()).decode("utf-8")
+    return s
+
 
 
 def main():
@@ -210,7 +249,7 @@ def main():
     # find the base batch size
     assert (args.base_resolution, args.base_frames) in buckets
     del buckets[buckets.index((args.base_resolution, args.base_frames))]
-    base_batch_size, base_step_time = benchmark(
+    base_batch_size, base_step_time, batch_sizes, step_times = benchmark(
         args,
         cfg,
         args.base_resolution,
@@ -226,14 +265,21 @@ def main():
         optimizer,
         ema,
     )
+
+    figure_data = {(args.base_resolution, args.base_frames): [batch_sizes, step_times]}
+    if coordinator.is_master():
+        update_figure_data(figure_data, args.output)
+
     update_bucket_config_bs(output_bucket_cfg, args.base_resolution, args.base_frames, base_batch_size)
     coordinator.print_on_master(
         f"{BColors.OKBLUE}Base resolution: {args.base_resolution}, Base frames: {args.base_frames}, Batch size: {base_batch_size}, Base step time: {base_step_time}{BColors.ENDC}"
     )
+
+
     result_table = [f"{args.base_resolution}, {args.base_frames}, {base_batch_size}, {base_step_time:.2f}"]
     for resolution, frames in buckets:
         try:
-            batch_size, step_time = benchmark(
+            batch_size, step_time, batch_sizes, step_times = benchmark(
                 args,
                 cfg,
                 resolution,
@@ -250,6 +296,10 @@ def main():
                 ema,
                 target_step_time=base_step_time,
             )
+            figure_data[(resolution, frames)] = [batch_sizes, step_times]
+            if coordinator.is_master():
+                update_figure_data(figure_data, args.output)
+
             coordinator.print_on_master(
                 f"{BColors.OKBLUE}Resolution: {resolution}, Frames: {frames}, Batch size: {batch_size}, Step time: {step_time}{BColors.ENDC}"
             )
@@ -320,21 +370,17 @@ def benchmark(
             lower_bound, upper_bound = orig_bs
         elif len(orig_bs) == 3:
             lower_bound, upper_bound, step_size = orig_bs
-    batch_start_size = lower_bound
 
-    while lower_bound < upper_bound:
-        mid = (lower_bound + upper_bound) // 2
+    for batch_size in range(lower_bound, upper_bound+1, step_size):
         try:
-            step_time = run_step(mid)
-            lower_bound = mid + 1
+            step_time = run_step(batch_size)
+        except torch.cuda.OutOfMemoryError:
+            traceback.print_exc()
+            break
         except Exception:
             traceback.print_exc()
-            upper_bound = mid
+            break
 
-    for batch_size in range(batch_start_size, upper_bound, step_size):
-        if batch_size in batch_sizes:
-            continue
-        step_time = run_step(batch_size)
     if len(step_times) == 0:
         raise RuntimeError("No valid batch size found")
     if target_step_time is None:
@@ -349,7 +395,7 @@ def benchmark(
         closest_step_time = min(diff)
         target_batch_size = batch_sizes[diff.index(closest_step_time)]
         step_time = step_times[diff.index(closest_step_time)]
-    return target_batch_size, step_time
+    return target_batch_size, step_time, batch_sizes, step_times
 
 
 def train(
@@ -373,11 +419,12 @@ def train(
     cfg = rewrite_config(deepcopy(cfg), resolution, num_frames, batch_size)
 
     dataset = build_module(cfg.dataset, DATASETS)
-    dataset.dummy = True
+    # dataset.dummy = True
     dataloader_args = dict(
         dataset=dataset,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
+        num_bucket_build_workers=cfg.num_bucket_build_workers,
         shuffle=True,
         drop_last=True,
         pin_memory=True,
@@ -401,6 +448,7 @@ def train(
     optimizer._bucket_store._padding_size = []
     for rank in range(optimizer._bucket_store._world_size):
         optimizer._bucket_store._grad_in_bucket[rank] = []
+        
     optimizer._bucket_store.offset_list = [0]
     optimizer.zero_grad()
     for step, batch in tqdm(
@@ -439,6 +487,16 @@ def train(
 
         # Backward & update
         loss = loss_dict["loss"].mean()
+
+
+        id_str = f"{resolution}-{batch_size}-{step}"
+        id_tensor = str2tensor(id_str, device=device)
+        coor = DistCoordinator()
+        tensor_list = [torch.zeros_like(id_tensor) for _ in range(coor.world_size)]
+        dist.all_gather(tensor_list, id_tensor)
+        for id_cur in tensor_list:
+            assert torch.equal(id_tensor, id_cur)
+
         booster.backward(loss=loss, optimizer=optimizer)
         optimizer.step()
         optimizer.zero_grad()
@@ -454,4 +512,7 @@ def train(
 
 
 if __name__ == "__main__":
+    # salloc --ntasks=1 --gpus-per-task=8 --cpus-per-task=128 --nodelist=ks-gpu-2
+    # OMP_NUM_THREADS=16 TOKENIZERS_PARALLELISM=true torchrun --standalone --nproc_per_node 8 scripts/misc/search_bs.py  configs/test/search_config.py -o configs/test/search_result-node1.py --data-path /slurmhome/kzhang/datasets/HD-VG-130M/data.csv --base-resolution 144p --base-frames 20 --batch-size-start 8 --batch-size-end 96 --batch-size-step 8
+    # OMP_NUM_THREADS=16 TOKENIZERS_PARALLELISM=true torchrun --standalone --nproc_per_node 8 scripts/misc/search_bs.py  configs/test/search_config.py -o configs/test/search_result-node2.py --data-path /slurmhome/kzhang/datasets/HD-VG-130M/data.csv --base-resolution 144p --base-frames 20 --batch-size-start 8 --batch-size-end 96 --batch-size-step 8
     main()

@@ -52,7 +52,7 @@ class VariableVideoBatchSampler(DistributedSampler):
     def group_by_bucket(self) -> dict:
         bucket_sample_dict = OrderedDict()
 
-        pandarallel.initialize(nb_workers=self.num_bucket_build_workers, progress_bar=False)
+        pandarallel.initialize(nb_workers=self.num_bucket_build_workers, progress_bar=False, verbose=1)
         bucket_ids = self.dataset.data.parallel_apply(
             apply,
             axis=1,
