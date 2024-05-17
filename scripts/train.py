@@ -49,7 +49,12 @@ def main():
     # 2.1. colossalai init distributed training
     # we set a very large timeout to avoid some processes exit early
     dist.init_process_group(backend="nccl", timeout=timedelta(hours=24))
-    torch.cuda.set_device(dist.get_rank())
+    local_rank = os.environ.get("LOCAL_RANK", None)
+    if local_rank:
+        local_rank = int(local_rank)
+    else:
+        local_rank = dist.get_rank % dist.get_world_size()
+    torch.cuda.set_device(local_rank)
     set_seed(1024)
     coordinator = DistCoordinator()
     device = get_current_device()
