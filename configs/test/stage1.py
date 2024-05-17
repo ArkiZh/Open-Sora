@@ -9,13 +9,11 @@ dataset = dict(
     max_samples=1000
 )
 # IMG: 1024 (20%) 512 (30%) 256 (50%) drop (50%)
-bucket_config = {  # 1s/it
-    "144p": {1: (0.5, 48), 16: (1.0, 2), 32: (1.0, 1)},
-    "256": {1: (0.5, 24), 16: (0.5, 3), 48: (0.5, 1), 64: (0.0, None)},
-    "240p": {16: (0.3, 2), 32: (0.3, 1), 64: (0.0, None)},
-    "512": {1: (0.4, 12)},
-    "1024": {1: (0.3, 3)},
-}
+bucket_config = dict({
+    '144p': {20: (1.0, 56), 30: (1.0, 40), 40: (1.0, 32), 50: (1.0, 24)},
+    '256': {20: (0.5, 32), 30: (0.5, 24), 40: (0.5, 16), 50: (0.5, 16)}
+})
+
 mask_ratios = {
     "mask_no": 0.75,
     "mask_quarter_random": 0.025,
@@ -29,10 +27,10 @@ mask_ratios = {
 }
 
 # Define acceleration
-num_workers = 1
-num_bucket_build_workers = 1
+num_workers = 16
+num_bucket_build_workers = 16
 dtype = "bf16"
-grad_checkpoint = False
+grad_checkpoint = True
 plugin = "zero2"
 sp_size = 1
 
@@ -70,7 +68,7 @@ wandb = False
 
 epochs = 1000
 log_every = 10
-ckpt_every = 500
+ckpt_every = 100
 load = None
 
 batch_size = None
