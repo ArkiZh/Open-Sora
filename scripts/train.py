@@ -49,7 +49,7 @@ def main():
     # 2.1. colossalai init distributed training
     # we set a very large timeout to avoid some processes exit early
     dist.init_process_group(backend="nccl", timeout=timedelta(hours=24))
-    torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(dist.get_rank())
     set_seed(1024)
     coordinator = DistCoordinator()
     device = get_current_device()
@@ -66,7 +66,7 @@ def main():
 
         writer = create_tensorboard_writer(exp_dir)
         if cfg.wandb:
-            wandb.init(project="minisora", name=exp_name, config=cfg._cfg_dict)
+            wandb.init(project="mysora", name=exp_name, config=cfg._cfg_dict)
 
     # 2.3. initialize ColossalAI booster
     if cfg.plugin == "zero2":
@@ -266,12 +266,15 @@ def main():
                 # Log loss values:
                 all_reduce_mean(loss)
                 running_loss += loss.item()
+
+                # Current step done, add 1
+                step += 1
                 global_step = epoch * num_steps_per_epoch + step
                 log_step += 1
                 acc_step += 1
 
                 # Log to tensorboard
-                if coordinator.is_master() and (global_step + 1) % cfg.log_every == 0:
+                if coordinator.is_master() and global_step % cfg.log_every == 0:
                     avg_loss = running_loss / log_step
                     pbar.set_postfix({"loss": avg_loss, "step": step, "global_step": global_step})
                     running_loss = 0
@@ -290,7 +293,7 @@ def main():
                         )
 
                 # Save checkpoint
-                if cfg.ckpt_every > 0 and (global_step + 1) % cfg.ckpt_every == 0:
+                if cfg.ckpt_every > 0 and global_step % cfg.ckpt_every == 0:
                     save(
                         booster,
                         model,
@@ -298,8 +301,8 @@ def main():
                         optimizer,
                         lr_scheduler,
                         epoch,
-                        step + 1,
-                        global_step + 1,
+                        step,
+                        global_step,
                         cfg.batch_size,
                         coordinator,
                         exp_dir,
@@ -307,7 +310,7 @@ def main():
                         sampler=sampler_to_io,
                     )
                     logger.info(
-                        f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {exp_dir}"
+                        f"Saved checkpoint at epoch {epoch} step {step} global_step {global_step} to {exp_dir}"
                     )
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
