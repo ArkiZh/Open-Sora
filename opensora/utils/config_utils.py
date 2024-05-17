@@ -150,15 +150,26 @@ def create_experiment_workspace(cfg):
         exp_dir: The path to the experiment folder.
     """
     # Make outputs folder (holds all experiment subfolders)
-    os.makedirs(cfg.outputs, exist_ok=True)
-    experiment_index = len(glob(f"{cfg.outputs}/*"))
-
-    # Create an experiment folder
+    from pathlib import Path
+    
     model_name = cfg.model["type"].replace("/", "-")
-    exp_name = f"{experiment_index:03d}-{model_name}"
-    exp_dir = f"{cfg.outputs}/{exp_name}"
-    os.makedirs(exp_dir, exist_ok=True)
-    return exp_name, exp_dir
+
+    out_dir = Path(cfg.outputs)
+    ind = 0
+    if out_dir.is_dir():
+        
+        for v in out_dir.iterdir():
+            if v.stem.startswith(model_name):
+                try:
+                    cur_ind = int(v.stem.split("-")[-1])
+                    ind = max(ind, cur_ind)
+                except:
+                    pass
+    ind+=1
+    exp_name = f"{model_name}-{ind:03d}"
+    exp_dir = Path(out_dir, exp_name)
+    exp_dir.mkdir(parents=True)
+    return exp_name, str(exp_dir.absolute())
 
 
 def save_training_config(cfg, experiment_dir):

@@ -6,12 +6,11 @@ dataset = dict(
     frame_interval=3,
     image_size=(None, None),
     transform_name="resize_crop",
-    max_samples=1000
+    # max_samples=1000
 )
 # IMG: 1024 (20%) 512 (30%) 256 (50%) drop (50%)
 bucket_config = dict({
-    '144p': {20: (1.0, 56), 30: (1.0, 40), 40: (1.0, 32), 50: (1.0, 24)},
-    '256': {20: (0.5, 32), 30: (0.5, 24), 40: (0.5, 16), 50: (0.5, 16)}
+    '144p': {10: (1.0, 1)}
 })
 
 mask_ratios = {

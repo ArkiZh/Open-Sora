@@ -1,6 +1,8 @@
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pprint
+from pathlib import Path
+import os
 
 import torch
 import torch.distributed as dist
@@ -37,8 +39,6 @@ def main():
     # 1. args & cfg
     # ======================================================
     cfg = parse_configs(training=True)
-    exp_name, exp_dir = create_experiment_workspace(cfg)
-    save_training_config(cfg._cfg_dict, exp_dir)
 
     # ======================================================
     # 2. runtime variables & colossalai launch
@@ -55,18 +55,34 @@ def main():
     device = get_current_device()
     dtype = to_torch_dtype(cfg.dtype)
 
-    # 2.2. init logger, tensorboard & wandb
-    if not coordinator.is_master():
-        logger = create_logger(None)
-    else:
+    if coordinator.is_master():
         print("Training configuration:")
         pprint(cfg._cfg_dict)
-        logger = create_logger(exp_dir)
-        logger.info(f"Experiment directory created at {exp_dir}")
+        exp_name, exp_dir = create_experiment_workspace(cfg)
+        save_training_config(cfg._cfg_dict, exp_dir)
+    else:
+        exp_name, exp_dir = None, None
+    
+    gathered = [None]*dist.get_world_size()
+    dist.all_gather_object(gathered, [exp_name, exp_dir])
+    exp_name, exp_dir = gathered[0]
+    Path(exp_dir).mkdir(exist_ok=True, parents=True)
 
+    logger = create_logger(exp_dir)
+    logger.info(f"Experiment name: {exp_name}")
+    logger.info(f"Experiment dir : {exp_dir}")
+
+    if coordinator.is_master():
+        save_training_config(cfg._cfg_dict, exp_dir)
+        logger.info(f"Config saved to: {exp_dir}")
         writer = create_tensorboard_writer(exp_dir)
         if cfg.wandb:
             wandb.init(project="mysora", name=exp_name, config=cfg._cfg_dict)
+    
+    logger.info("============ ENV ===============")
+    for env_k, env_v in os.environ.items():
+        logger.info(f"{env_k:-<50s}-> {env_v}")
+    logger.info("============ ENV END ===========")
 
     # 2.3. initialize ColossalAI booster
     if cfg.plugin == "zero2":
@@ -230,6 +246,29 @@ def main():
             total=num_steps_per_epoch,
         ) as pbar:
             for step, batch in pbar:
+                global_step = epoch * num_steps_per_epoch + step
+
+                                # Save checkpoint
+                if cfg.ckpt_every > 0 and global_step % cfg.ckpt_every == 0 and global_step!=0:
+                    save(
+                        booster,
+                        model,
+                        ema,
+                        optimizer,
+                        lr_scheduler,
+                        epoch,
+                        step,
+                        global_step,
+                        cfg.batch_size,
+                        coordinator,
+                        exp_dir,
+                        ema_shape_dict,
+                        sampler=sampler_to_io,
+                    )
+                    logger.info(
+                        f"Saved checkpoint at epoch {epoch} step {step} global_step {global_step} to {exp_dir}"
+                    )
+
                 x = batch.pop("video").to(device, dtype)  # [B, C, T, H, W]
                 y = batch.pop("text")
                 # Visual and text encoding
@@ -269,7 +308,7 @@ def main():
 
                 # Current step done, add 1
                 step += 1
-                global_step = epoch * num_steps_per_epoch + step
+                global_step += 1
                 log_step += 1
                 acc_step += 1
 
@@ -292,29 +331,6 @@ def main():
                             step=global_step,
                         )
 
-                # Save checkpoint
-                if cfg.ckpt_every > 0 and global_step % cfg.ckpt_every == 0:
-                    if step==num_steps_per_epoch:
-                        epoch+=1
-                        step = 0
-                    save(
-                        booster,
-                        model,
-                        ema,
-                        optimizer,
-                        lr_scheduler,
-                        epoch,
-                        step,
-                        global_step,
-                        cfg.batch_size,
-                        coordinator,
-                        exp_dir,
-                        ema_shape_dict,
-                        sampler=sampler_to_io,
-                    )
-                    logger.info(
-                        f"Saved checkpoint at epoch {epoch} step {step} global_step {global_step} to {exp_dir}"
-                    )
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         if cfg.dataset.type == "VideoTextDataset":
