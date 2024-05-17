@@ -294,6 +294,9 @@ def main():
 
                 # Save checkpoint
                 if cfg.ckpt_every > 0 and global_step % cfg.ckpt_every == 0:
+                    if step==num_steps_per_epoch:
+                        epoch+=1
+                        step = 0
                     save(
                         booster,
                         model,
