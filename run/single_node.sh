@@ -1,0 +1,2 @@
+set -x
+OMP_NUM_THREADS=16 TOKENIZERS_PARALLELISM=true torchrun --nnodes=1 --nproc_per_node=8 train.py config.py --data-path /slurmhome/kzhang/datasets/HD-VG-130M/data.csv --load /slurmhome/kzhang/repos/Open-Sora/run/outputs/STDiT2-XL-2-001/epoch47-global_step43700
