@@ -297,10 +297,15 @@ def main():
                 if loop_i == cfg.loop - 1:
                     if not use_dist or coordinator.is_master():
                         step = "default"
+                        epoch = "default"
                         if cfg.model.from_pretrained:
                             if "step" in cfg.model.from_pretrained:
                                 step = cfg.model.from_pretrained.split("step")[-1]
                                 step = step.split("/")[0]
+                            if "epoch" in cfg.model.from_pretrained:
+                                epoch = cfg.model.from_pretrained.split("epoch")[-1]
+                                epoch = epoch.split("-")[0]
+                            
 
                         for idx in range(len(video_clips[0])):
                             video_clips_i = [video_clips[0][idx]] + [
@@ -312,7 +317,7 @@ def main():
                                 sample_name_suffix = batch_prompts_raw[idx]
                             else:
                                 sample_name_suffix = f"_{sample_idx}"
-                            save_path = os.path.join(save_dir, f"{sample_name}_{step:0>6s}{sample_name_suffix}")
+                            save_path = os.path.join(save_dir, f"{sample_name}_{epoch:0>3s}_{step:0>6s}{sample_name_suffix}")
                             if cfg.num_sample != 1:
                                 save_path = f"{save_path}_{k}"
                             save_sample(video, fps=cfg.fps // cfg.frame_interval, save_path=save_path)
@@ -321,5 +326,6 @@ def main():
 
 if __name__ == "__main__":
     import sys
-    sys.argv.extend("sample_trained.py --ckpt-path /slurmhome/kzhang/repos/Open-Sora/run/outputs/STDiT2-XL-2-001/epoch38-global_step36000/model".split(" "))
+    # if "--ckpt-path" not in sys.argv:
+    #     sys.argv.extend("sample_trained.py --ckpt-path /slurmhome/kzhang/repos/Open-Sora/run/outputs/STDiT2-XL-2-002/epoch62-global_step28800/model".split(" "))
     main()

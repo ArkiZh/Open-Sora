@@ -1,7 +1,7 @@
 num_frames = 40
 frame_interval = 3
 fps = 30
-image_size = (240, 426)
+image_size = (144, 256)
 multi_resolution = "STDiT2"
 
 
@@ -41,6 +41,6 @@ scheduler = dict(
 dtype = "bf16"
 
 # Others
-batch_size = 1
+batch_size = 8
 seed = 42
 

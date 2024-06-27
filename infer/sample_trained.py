@@ -34,8 +34,8 @@ text_encoder = dict(
 scheduler = dict(
     type="iddpm",
     num_sampling_steps=100,
-    # cfg_scale=7.0,
-    # cfg_channel=3,  # or None
+    cfg_scale=7.0,
+    cfg_channel=3,  # or None
 )
 dtype = "bf16"
 
